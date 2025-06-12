@@ -1,55 +1,623 @@
 <!-- templates/index.html -->
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-TW">
 <head>
   <meta charset="UTF-8" />
-  <title>多语种翻译</title>
+  <title>多語種翻譯</title>
   <!-- 引入 Tailwind CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    /* For Webkit-based browsers (Chrome, Safari) */
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 8px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #888;
+      border-radius: 4px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #555;
+    }
+    /* Simple toast notification style */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: #333;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 5px;
+      z-index: 1000;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    .toast.show {
+      opacity: 1;
+    }
+    #vocab-modal {
+      z-index: 50; /* Ensure modal is on top */
+    }
+  </style>
 </head>
-<body class="min-h-screen bg-gray-100 flex flex-col items-center p-6">
-  <h1 class="text-3xl font-bold mb-6">多语种翻译器</h1>
+<body class="bg-gray-100">
 
-  <form action="/translate" method="post"
-        class="w-full max-w-3xl bg-white rounded-lg shadow-lg p-6 space-y-4">
-    <div class="flex space-x-4">
-      <div class="flex-1">
-        <label class="block text-sm font-medium text-gray-700 mb-1">源语言</label>
-        <select name="src_lang" 
-                class="w-full border border-gray-300 rounded px-3 py-2">
-          {% for l in langs %}
-            <option value="{{l}}" {% if selected_src==l %}selected{% endif %}>{{l}}</option>
-          {% endfor %}
-        </select>
+  <!-- Vocabulary Button -->
+  <button id="vocab-button" class="fixed bottom-6 right-6 bg-white p-3 rounded-full shadow-lg border hover:bg-gray-200 transition">
+    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v11.494m-5.747-3.996h11.494M4 12a8 8 0 1116 0 8 8 0 01-16 0z" />
+    </svg>
+  </button>
+
+  <!-- Vocabulary Modal (hidden by default) -->
+  <div id="vocab-modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-6xl h-[95vh] flex flex-col">
+      <div class="p-4 border-b flex justify-between items-center">
+        <h2 class="text-2xl font-semibold">詞彙表</h2>
+        <button id="close-modal-btn" class="text-gray-500 hover:text-gray-800 text-3xl leading-none">&times;</button>
       </div>
-      <div class="flex-1">
-        <label class="block text-sm font-medium text-gray-700 mb-1">目标语言</label>
-        <select name="tgt_lang" 
-                class="w-full border border-gray-300 rounded px-3 py-2">
-          {% for l in langs %}
-            <option value="{{l}}" {% if selected_tgt==l %}selected{% endif %}>{{l}}</option>
-          {% endfor %}
-        </select>
+      <div id="vocab-content" class="p-4 overflow-auto custom-scrollbar">
+        <!-- Vocabulary content will be loaded here -->
       </div>
     </div>
-
-    <div>
-      <label class="block text-sm font-medium text-gray-700 mb-1">输入文本</label>
-      <textarea name="text" rows="6" 
-                class="w-full border border-gray-300 rounded px-3 py-2">{{input or ""}}</textarea>
-    </div>
-
-    <button type="submit"
-            class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition">
-      翻译
-    </button>
-  </form>
-
-  {% if output %}
-  <div class="w-full max-w-3xl bg-white rounded-lg shadow-lg p-6 mt-6">
-    <h2 class="text-2xl font-semibold mb-4">翻译结果</h2>
-    <pre class="whitespace-pre-wrap text-gray-800">{{output}}</pre>
   </div>
-  {% endif %}
+
+  <div class="flex h-screen">
+    <!-- Left Sidebar for History -->
+    <aside class="w-1/4 bg-white p-4 border-r overflow-y-auto custom-scrollbar">
+      <h2 class="text-xl font-semibold mb-4 text-gray-700">翻譯歷史紀錄</h2>
+      <div id="history-container" class="space-y-3">
+        {% for item in history %}
+        <div class="history-card-wrapper cursor-pointer group relative" data-full-translation="{{ item.translated_text }}">
+          <div class="p-3 bg-gray-50 border rounded-lg shadow-sm hover:bg-gray-200 hover:border-gray-300">
+            <p class="font-semibold text-sm text-gray-800">{{ item.from_lang }} → {{ item.to_lang }}</p>
+            <div class="text-xs text-gray-600 mt-2 space-y-1">
+                <p><strong>原文:</strong></p>
+                <pre class="whitespace-pre-wrap font-sans">{{ item.source_text.split('\\n')[0] }}</pre>
+            </div>
+            <div class="text-xs text-gray-500 mt-2 space-y-1">
+                <p><strong>譯文:</strong></p>
+                <pre class="whitespace-pre-wrap font-sans">{{ item.translated_text.split('\\n')[0] }}</pre>
+            </div>
+          </div>
+          <button class="delete-history-btn absolute top-2 right-2 p-1 rounded-full bg-gray-300 text-gray-600 hover:bg-red-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" data-id="{{ item.id }}">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+          </button>
+        </div>
+        {% else %}
+        <p id="no-history-message" class="text-sm text-gray-500">尚無翻譯歷史紀錄。</p>
+        {% endfor %}
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-6 overflow-y-auto custom-scrollbar">
+      <div class="w-full max-w-3xl mx-auto">
+        <h1 class="text-3xl font-bold mb-6 text-center">多語種翻譯器</h1>
+
+        <form id="translate-form"
+              class="bg-white rounded-lg shadow-lg p-6 space-y-4">
+          
+          <!-- API Key Section -->
+          <div class="space-y-2">
+              <label class="block text-sm font-medium text-gray-700">API 金鑰來源</label>
+              <div class="flex items-center space-x-4">
+                  <label class="flex items-center">
+                      <input type="radio" name="api_key_source" value="env" checked class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                      <span class="ml-2 text-sm text-gray-900">使用 .env 檔案</span>
+                  </label>
+                  <label class="flex items-center">
+                      <input type="radio" name="api_key_source" value="manual" class="h-4 w-4 text-blue-600 border-gray-300 focus:ring-blue-500">
+                      <span class="ml-2 text-sm text-gray-900">手動輸入</span>
+                  </label>
+              </div>
+              <div class="flex items-center space-x-2">
+                  <input type="password" name="manual_api_key" id="manual_api_key_input" placeholder="在此貼上您的 API 金鑰"
+                         class="flex-grow w-full border border-gray-300 rounded px-3 py-2 mt-1 bg-gray-100 transition" disabled>
+                  <button type="button" id="paste-api-key-button" class="mt-1 px-3 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed transition" disabled>貼上</button>
+              </div>
+          </div>
+          
+          <!-- Language and Text Input -->
+          <div class="flex space-x-4">
+            <div class="flex-1">
+              <label class="block text-sm font-medium text-gray-700 mb-1">目標語言</label>
+              <select name="tgt_lang" 
+                      class="w-full border border-gray-300 rounded px-3 py-2">
+                {% for code, name in langs.items() %}
+                  <option value="{{code}}" {% if selected_tgt==code %}selected{% endif %}>{{name}}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="flex justify-between items-center mb-1">
+              <label for="text-input" class="block text-sm font-medium text-gray-700">輸入文本</label>
+              <button type="button" id="paste-text-button" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-800 font-semibold py-1 px-2 rounded">
+                貼上
+              </button>
+            </div>
+            <textarea name="text" id="text-input" rows="6"
+                      class="w-full border border-gray-300 rounded px-3 py-2"></textarea>
+          </div>
+
+          <button type="button" id="translate-button"
+                  class="w-full bg-blue-600 text-white font-semibold py-2 rounded hover:bg-blue-700 transition">
+            翻譯
+          </button>
+        </form>
+
+        <!-- Results Section -->
+        <div id="results-section" class="w-full max-w-3xl mx-auto mt-6 space-y-6">
+            <!-- Skeleton Loader -->
+            <div id="skeleton-loader" class="hidden space-y-6">
+              <div class="w-full bg-white rounded-lg shadow-lg p-6">
+                <div class="animate-pulse space-y-4">
+                  <div class="h-6 bg-gray-200 rounded w-1/3 mb-4"></div>
+                  <div class="space-y-2"><div class="h-4 bg-gray-200 rounded"></div><div class="h-4 bg-gray-200 rounded w-5/6"></div></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Real Content -->
+            <div id="real-content" class="hidden">
+              <!-- Translation Result Card -->
+              <div id="result-container" class="w-full bg-white rounded-lg shadow-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                  <h2 class="text-xl font-semibold">翻譯結果</h2>
+                  <button type="button" id="copy-button" class="text-xs bg-blue-100 hover:bg-blue-200 text-blue-800 font-semibold py-1 px-2 rounded">複製</button>
+                </div>
+                <pre id="output-pre" class="whitespace-pre-wrap text-gray-800"></pre>
+              </div>
+            </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+  
+  <div id="toast-notification" class="toast"></div>
+
+<script>
+  const langs = {{ langs|tojson }};
+</script>
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    // --- Element Selections ---
+    const translateButton = document.getElementById('translate-button');
+    const translateForm = document.getElementById('translate-form');
+    const skeletonLoader = document.getElementById('skeleton-loader');
+    const realContent = document.getElementById('real-content');
+    const historyContainer = document.getElementById('history-container');
+    const outputPre = document.getElementById('output-pre');
+    const glossaryContent = document.getElementById('glossary-content');
+    const copyButton = document.getElementById('copy-button');
+    const apiKeyRadios = document.querySelectorAll('input[name="api_key_source"]');
+    const manualKeyInput = document.getElementById('manual_api_key_input');
+    const pasteApiKeyButton = document.getElementById('paste-api-key-button');
+    const pasteTextButton = document.getElementById('paste-text-button');
+    const textInput = document.getElementById('text-input');
+    const toast = document.getElementById('toast-notification');
+
+    // --- Vocabulary Elements ---
+    const vocabButton = document.getElementById('vocab-button');
+    const vocabModal = document.getElementById('vocab-modal');
+    const closeModalBtn = document.getElementById('close-modal-btn');
+    const vocabContent = document.getElementById('vocab-content');
+    
+    // --- Toast Notification ---
+    function showToast(message) {
+        if (!toast) return;
+        toast.textContent = message;
+        toast.classList.add('show');
+        setTimeout(() => {
+            toast.classList.remove('show');
+        }, 3000);
+    }
+
+    // --- API Key Logic ---
+    if (apiKeyRadios) {
+        apiKeyRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                const isManual = e.target.value === 'manual';
+                manualKeyInput.disabled = !isManual;
+                pasteApiKeyButton.disabled = !isManual;
+                if (isManual) {
+                    manualKeyInput.classList.remove('bg-gray-100');
+                    manualKeyInput.focus();
+                } else {
+                    manualKeyInput.classList.add('bg-gray-100');
+                }
+            });
+        });
+    }
+    if (pasteApiKeyButton) {
+        pasteApiKeyButton.addEventListener('click', async () => {
+            try {
+                const key = await navigator.clipboard.readText();
+                manualKeyInput.value = key;
+                showToast('API 金鑰已貼上');
+            } catch (err) {
+                showToast('無法讀取剪貼簿');
+                console.error('Failed to read clipboard: ', err);
+            }
+        });
+    }
+
+    // --- Text Input Logic ---
+    if (pasteTextButton) {
+        pasteTextButton.addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                textInput.value = text;
+                showToast('文字已貼上');
+            } catch (err) {
+                showToast('無法讀取剪貼簿');
+                console.error('Failed to read clipboard: ', err);
+            }
+        });
+    }
+
+    // --- History Card Logic ---
+    if (historyContainer) {
+        historyContainer.addEventListener('click', (e) => {
+            const card = e.target.closest('.history-card-wrapper');
+            const deleteBtn = e.target.closest('.delete-history-btn');
+
+            if (deleteBtn) {
+                e.stopPropagation(); // Prevent the card click event from firing
+                const historyId = deleteBtn.dataset.id;
+                handleDeleteHistory(historyId, card);
+                return;
+            }
+
+            if (card) {
+                const fullTranslation = card.dataset.fullTranslation;
+                navigator.clipboard.writeText(fullTranslation).then(() => {
+                    showToast('已複製譯文');
+                }).catch(err => {
+                    showToast('複製失敗');
+                    console.error('Could not copy text: ', err);
+                });
+            }
+        });
+    }
+
+    // --- Translation Logic ---
+    if (translateButton) {
+        translateButton.addEventListener('click', async () => {
+            const formData = new FormData(translateForm);
+            
+            skeletonLoader.classList.remove('hidden');
+            realContent.classList.add('hidden');
+            
+            try {
+                const response = await fetch('/translate', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (!response.ok) throw new Error('Network response was not ok.');
+                
+                const data = await response.json();
+                
+                outputPre.textContent = data.translation;
+                
+                if (data.history_item) {
+                    prependHistoryCard(data.history_item);
+                }
+                
+            } catch (error) {
+                console.error('Translation error:', error);
+                outputPre.textContent = '翻譯失敗，請檢查網路連線或稍後再試。';
+            } finally {
+                skeletonLoader.classList.add('hidden');
+                realContent.classList.remove('hidden');
+            }
+        });
+    }
+
+    // --- Copy Button Logic ---
+    if (copyButton) {
+        copyButton.addEventListener('click', () => {
+            navigator.clipboard.writeText(outputPre.textContent).then(() => {
+                showToast('已複製翻譯結果');
+            }).catch(err => {
+                showToast('複製失敗');
+                console.error('Could not copy text: ', err);
+            });
+        });
+    }
+    
+    function truncateText(text, length = 20) {
+        if (text.length <= length) {
+            return text;
+        }
+        return text.substring(0, length) + '...';
+    }
+
+    async function handleDeleteHistory(id, cardElement) {
+        if (!confirm('您確定要刪除這筆歷史紀錄嗎？')) return;
+
+        try {
+            const response = await fetch(`/history/${id}`, { method: 'DELETE' });
+            if (!response.ok) {
+                throw new Error('刪除失敗');
+            }
+            showToast('歷史紀錄已刪除');
+            cardElement.remove();
+
+            // Check if history is now empty
+            if (historyContainer.children.length === 0) {
+                historyContainer.innerHTML = '<p id="no-history-message" class="text-sm text-gray-500">尚無翻譯歷史紀錄。</p>';
+            }
+        } catch (error) {
+            console.error('Delete failed:', error);
+            showToast(error.message);
+        }
+    }
+    
+    function prependHistoryCard(item) {
+        if (!historyContainer) return;
+
+        // Remove 'no history' message if it exists
+        const noHistoryMsg = document.getElementById('no-history-message');
+        if (noHistoryMsg) {
+            noHistoryMsg.remove();
+        }
+
+        const card = document.createElement('div');
+        card.className = 'history-card-wrapper cursor-pointer group relative';
+        card.dataset.fullTranslation = item.translated_text;
+        card.innerHTML = `
+          <div class="p-3 bg-gray-50 border rounded-lg shadow-sm hover:bg-gray-200 hover:border-gray-300">
+            <p class="font-semibold text-sm text-gray-800">${item.from_lang} → ${item.to_lang}</p>
+            <div class="text-xs text-gray-600 mt-2 space-y-1">
+                <p><strong>原文:</strong></p>
+                <pre class="whitespace-pre-wrap font-sans">${truncateText(item.source_text)}</pre>
+            </div>
+            <div class="text-xs text-gray-500 mt-2 space-y-1">
+                <p><strong>譯文:</strong></p>
+                <pre class="whitespace-pre-wrap font-sans">${truncateText(item.translated_text)}</pre>
+            </div>
+          </div>
+          <button class="delete-history-btn absolute top-2 right-2 p-1 rounded-full bg-gray-300 text-gray-600 hover:bg-red-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" data-id="${item.id}">
+              <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" /></svg>
+          </button>
+        `;
+
+        historyContainer.prepend(card);
+    }
+
+    // --- Vocabulary Modal Logic ---
+    if (vocabButton) {
+        vocabButton.addEventListener('click', () => {
+            if (vocabModal) {
+                vocabModal.classList.remove('hidden');
+                loadVocabulary();
+            }
+        });
+    }
+
+    if (closeModalBtn) {
+        closeModalBtn.addEventListener('click', () => {
+            if (vocabModal) {
+                vocabModal.classList.add('hidden');
+            }
+        });
+    }
+
+    async function loadVocabulary() {
+        if (!vocabContent) return;
+        vocabContent.innerHTML = '<p>讀取中...</p>';
+        try {
+            const response = await fetch('/vocabulary');
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            const vocabulary = await response.json();
+            renderVocabulary(vocabulary);
+        } catch (error) {
+            console.error("Could not fetch vocabulary:", error);
+            vocabContent.innerHTML = '<p class="text-red-500">無法載入詞彙表。</p>';
+        }
+    }
+
+    function renderVocabulary(vocabulary) {
+        vocabContent.innerHTML = ''; 
+
+        const formHtml = `
+            <div class="mb-4">
+                <button id="add-vocab-toggle-btn" class="w-full text-left px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-md text-sm font-medium">＋ 新增詞彙</button>
+            </div>
+            <div id="vocab-form-container" class="hidden mb-6 bg-gray-50 p-4 rounded-lg">
+                <h3 class="text-lg font-semibold mb-2" id="vocab-form-title">新增詞彙</h3>
+                <form id="vocab-form" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input type="hidden" id="vocab-id" name="id">
+                    <div>
+                        <label for="vocab-source" class="block text-sm font-medium text-gray-700">原文</label>
+                        <input type="text" id="vocab-source" name="source_text" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="vocab-lang" class="block text-sm font-medium text-gray-700">語言</label>
+                        <select id="vocab-lang" name="language" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                            ${Object.entries(langs).map(([code, name]) => `<option value="${code}">${name}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div>
+                        <label for="vocab-translation" class="block text-sm font-medium text-gray-700">翻譯</label>
+                        <input type="text" id="vocab-translation" name="translated_text" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div>
+                        <label for="vocab-annotation" class="block text-sm font-medium text-gray-700">註釋</label>
+                        <input type="text" id="vocab-annotation" name="annotation" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50">
+                    </div>
+                    <div class="md:col-span-2 flex items-center justify-end space-x-2">
+                        <button type="button" id="cancel-edit-btn" class="hidden px-4 py-2 bg-gray-300 text-gray-800 rounded-md hover:bg-gray-400">取消</button>
+                        <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">儲存</button>
+                    </div>
+                </form>
+            </div>`;
+        vocabContent.insertAdjacentHTML('beforeend', formHtml);
+
+        const tableHtml = `
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-20">操作</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">原文</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">語言</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">翻譯</th>
+                            <th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">註釋</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vocab-table-body" class="bg-white divide-y divide-gray-200">
+                        ${vocabulary.map(term => `
+                            <tr data-id="${term.id}">
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                    <button class="edit-btn text-indigo-600 hover:text-indigo-900 mr-3">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M17.414 2.586a2 2 0 00-2.828 0L7 10.172V13h2.828l7.586-7.586a2 2 0 000-2.828z" /><path fill-rule="evenodd" d="M2 6a2 2 0 012-2h4a1 1 0 010 2H4v10h10v-4a1 1 0 112 0v4a2 2 0 01-2 2H4a2 2 0 01-2-2V6z" clip-rule="evenodd" /></svg>
+                                    </button>
+                                    <button class="delete-btn text-red-600 hover:text-red-900">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v6a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
+                                    </button>
+                                </td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${truncateText(term.source_text)}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${langs[term.language] || term.language}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${truncateText(term.translated_text)}</td>
+                                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${term.annotation || ''}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        `;
+        vocabContent.insertAdjacentHTML('beforeend', tableHtml);
+
+        document.getElementById('add-vocab-toggle-btn').addEventListener('click', (e) => {
+            const formContainer = document.getElementById('vocab-form-container');
+            const isHidden = formContainer.classList.contains('hidden');
+            formContainer.classList.toggle('hidden');
+            e.target.textContent = isHidden ? '－ 收起表單' : '＋ 新增詞彙';
+        });
+
+        document.getElementById('vocab-form').addEventListener('submit', handleFormSubmit);
+        document.getElementById('cancel-edit-btn').addEventListener('click', resetForm);
+        document.querySelectorAll('.edit-btn').forEach(btn => btn.addEventListener('click', handleEditClick));
+        document.querySelectorAll('.delete-btn').forEach(btn => btn.addEventListener('click', handleDeleteClick));
+    }
+
+    function handleEditClick(e) {
+        const row = e.target.closest('tr');
+        const id = row.dataset.id;
+        const source = row.children[1].textContent;
+        const langCode = Object.keys(langs).find(key => langs[key] === row.children[2].textContent.trim());
+        const translation = row.children[3].textContent;
+        const annotation = row.children[4].textContent;
+
+        document.getElementById('vocab-form-title').textContent = '編輯詞彙';
+        document.getElementById('vocab-id').value = id;
+        document.getElementById('vocab-source').value = source;
+        document.getElementById('vocab-source').readOnly = true;
+        document.getElementById('vocab-source').classList.add('bg-gray-100');
+        document.getElementById('vocab-lang').value = langCode;
+        document.getElementById('vocab-lang').disabled = true;
+        document.getElementById('vocab-lang').classList.add('bg-gray-100');
+        document.getElementById('vocab-translation').value = translation;
+        document.getElementById('vocab-annotation').value = annotation;
+        document.getElementById('cancel-edit-btn').classList.remove('hidden');
+        document.getElementById('vocab-translation').focus();
+        
+        // Show the form if it's hidden for editing
+        const formContainer = document.getElementById('vocab-form-container');
+        if (formContainer.classList.contains('hidden')) {
+            formContainer.classList.remove('hidden');
+            document.getElementById('add-vocab-toggle-btn').textContent = '－ 收起表單';
+        }
+        
+        vocabContent.scrollTop = 0;
+    }
+    
+    function resetForm() {
+        document.getElementById('vocab-form-title').textContent = '新增詞彙';
+        document.getElementById('vocab-form').reset();
+        document.getElementById('vocab-id').value = '';
+        const sourceInput = document.getElementById('vocab-source');
+        sourceInput.readOnly = false;
+        sourceInput.classList.remove('bg-gray-100');
+        const langSelect = document.getElementById('vocab-lang');
+        langSelect.disabled = false;
+        langSelect.classList.remove('bg-gray-100');
+        document.getElementById('cancel-edit-btn').classList.add('hidden');
+        
+        // Hide the form and reset button text
+        document.getElementById('vocab-form-container').classList.add('hidden');
+        document.getElementById('add-vocab-toggle-btn').textContent = '＋ 新增詞彙';
+    }
+
+    async function handleFormSubmit(e) {
+        e.preventDefault();
+        const form = e.target;
+        const id = form.querySelector('#vocab-id').value;
+        const data = {
+            source_text: form.querySelector('#vocab-source').value,
+            language: form.querySelector('#vocab-lang').value,
+            translated_text: form.querySelector('#vocab-translation').value,
+            annotation: form.querySelector('#vocab-annotation').value,
+        };
+
+        const url = id ? `/vocabulary/${id}` : '/vocabulary';
+        const method = id ? 'PUT' : 'POST';
+        
+        let body;
+        if (id) {
+            body = JSON.stringify({
+                translated_text: data.translated_text,
+                annotation: data.annotation
+            });
+        } else {
+            body = JSON.stringify(data);
+        }
+
+        try {
+            const response = await fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json' },
+                body: body
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || 'An unknown error occurred.');
+            }
+            showToast(id ? '詞彙已更新' : '詞彙已新增');
+            loadVocabulary(); // This will re-render the whole modal content
+        } catch (error) {
+            console.error('Failed to save vocabulary term:', error);
+            showToast(`錯誤: ${error.message}`);
+        }
+    }
+
+    async function handleDeleteClick(e) {
+        const row = e.target.closest('tr');
+        const id = row.dataset.id;
+        if (confirm('您確定要刪除這個詞彙嗎？')) {
+            try {
+                const response = await fetch(`/vocabulary/${id}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    throw new Error('Failed to delete.');
+                }
+                showToast('詞彙已刪除');
+                loadVocabulary();
+            } catch (error) {
+                console.error('Delete failed:', error);
+                showToast('刪除失敗');
+            }
+        }
+    }
+});
+</script>
 </body>
 </html> 
