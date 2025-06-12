@@ -1,5 +1,7 @@
 # AI_Trans 專案 Docker 部署指南
 
+以下說明「方案 B（`--rm` 自動清理）」，以更清晰、易讀的方式撰寫，適合作為 GitHub 上的安裝說明文件。
+
 ---
 
 ## 先決條件
@@ -27,9 +29,11 @@ cd ai_trans
 在專案根目錄下建立 `.env` 檔案，並將你的 OpenAI API Key 寫入：
 
 ```bash
-cat > .env <<EOF
-OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx
-EOF
+# Bash / Zsh:
+echo "OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx" > .env
+
+# Fish Shell:
+echo OPENAI_API_KEY=sk-xxxxxxxxxxxxxxxxxxxx > .env
 ```
 
 > **提示**：請將 `sk-xxxxxxxxxxxxxxxxxxxx` 替換為你的實際 API Key。
@@ -93,3 +97,5 @@ http://localhost:8000
   **A**：編輯專案根目錄下的 `.env` 檔案，更新 `OPENAI_API_KEY`，然後重啟容器。
 
 ---
+
+歡迎在本專案發佈 issue 或 pull request，如需更多說明，請參閱專案文件或聯繫維護者。
