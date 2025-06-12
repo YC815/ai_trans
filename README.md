@@ -62,6 +62,20 @@
     - `--name langgraph-translator-container`: 為您的容器指定一個名稱，方便管理。
     - `langgraph-translator`: 您在 `build` 步驟中為映像檔指定的名稱。
 
+    > **提示**: 如果您重新執行此指令，可能會看到一個錯誤，表示名為 `langgraph-translator-container` 的容器已存在。這是正常的，因為每個容器名稱都必須是唯一的。
+    > 在重新執行 `run` 指令之前，您需要先停止並移除舊的容器：
+    >
+    > ```bash
+    > docker stop langgraph-translator-container
+    > docker rm langgraph-translator-container
+    > ```
+    >
+    > 或者，在開發過程中，您可以加上 `--rm` 旗標，這樣容器在停止後會自動被刪除，非常方便：
+    >
+    > ```bash
+    > docker run --rm -d -p 8000:8000 --env-file .env -v $(pwd)/translator.db:/app/translator.db --name langgraph-translator-container langgraph-translator
+    > ```
+
 5.  **開啟應用程式**
 
     現在，您可以在瀏覽器中開啟 `http://localhost:8000` 來使用此應用程式。
