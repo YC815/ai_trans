@@ -23,8 +23,8 @@
 1.  **複製 (Clone) 專案**
 
     ```bash
-    git clone https://github.com/your-username/langgraph_translator.git
-    cd langgraph_translator
+    [git clone https://github.com/your-username/langgraph_translator.git](https://github.com/YC815/ai_trans.git)
+    cd ai_trans
     ```
 
 2.  **建立 `.env` 檔案**
