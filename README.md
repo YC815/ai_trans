@@ -23,7 +23,7 @@
 1.  **複製 (Clone) 專案**
 
     ```bash
-    [git clone https://github.com/your-username/langgraph_translator.git](https://github.com/YC815/ai_trans.git)
+    git clone https://github.com/YC815/ai_trans.git
     cd ai_trans
     ```
 
