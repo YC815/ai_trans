@@ -1,0 +1,4 @@
+Alice loves Bob. Bob is a software developer. 
+
+馬斯克創辦的 SpaceX 公司，近期成功發射了星艦（Starship）。這艘巨大的火箭旨在將人類送往火星。
+同時，該公司的另一大專案「星鏈計畫」（Starlink）也持續部署，目標是提供覆蓋全球的高速衛星網路。 
