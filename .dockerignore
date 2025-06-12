@@ -1,0 +1,29 @@
+# Git
+.git
+.gitignore
+
+# Virtualenv
+.venv
+venv
+ENV
+env
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Database
+*.db
+*.sqlite3
+
+# Test reports
+test_reports/
+
+# IDE files
+.idea/
+.vscode/
+
+# dotenv
+.env 
