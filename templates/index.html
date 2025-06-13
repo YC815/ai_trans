@@ -76,11 +76,11 @@
             <p class="font-semibold text-sm text-gray-800">{{ item.from_lang }} → {{ item.to_lang }}</p>
             <div class="text-xs text-gray-600 mt-2 space-y-1">
                 <p><strong>原文:</strong></p>
-                <pre class="whitespace-pre-wrap font-sans">{{ item.source_text.split('\\n')[0] }}</pre>
+                <pre class="whitespace-pre-wrap font-sans">{{ item.source_text[:10] if item.source_text else '' }}...</pre>
             </div>
             <div class="text-xs text-gray-500 mt-2 space-y-1">
                 <p><strong>譯文:</strong></p>
-                <pre class="whitespace-pre-wrap font-sans">{{ item.translated_text.split('\\n')[0] }}</pre>
+                <pre class="whitespace-pre-wrap font-sans">{{ item.translated_text[:10] if item.translated_text else '' }}...</pre>
             </div>
           </div>
           <button class="delete-history-btn absolute top-2 right-2 p-1 rounded-full bg-gray-300 text-gray-600 hover:bg-red-500 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity focus:opacity-100" data-id="{{ item.id }}">
@@ -290,6 +290,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Translation Logic ---
     if (translateButton) {
         translateButton.addEventListener('click', async () => {
+            outputPre.textContent = '';
             const formData = new FormData(translateForm);
             
             skeletonLoader.classList.remove('hidden');
@@ -333,7 +334,8 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
-    function truncateText(text, length = 20) {
+    function truncateText(text, length = 10) {
+        if (!text) return '';
         if (text.length <= length) {
             return text;
         }

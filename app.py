@@ -173,91 +173,98 @@ async def translate(request: Request,
                     tgt_lang: str = Form(...),
                     # 從表單中獲取名為 "text" 的資料
                     text: str = Form(...)):
-
-    # --- Phase 2: Vocabulary Application ---
-    # 1. Get vocabulary from DB for the target language
-    vocabulary = database.get_vocabulary_for_lang(tgt_lang)
-
-    # 2. Prepare vocabulary instructions for the prompt
-    vocab_instructions = ""
-    if vocabulary:
-        # Sort by length of source_text descending to handle substrings correctly
-        vocabulary.sort(key=lambda x: len(x['source_text']), reverse=True)
-
-        # Format for prompt
-        vocab_list_str = "\n".join([f'- "{term["source_text"]}" must be translated as "{term["translated_text"]}"' for term in vocabulary])
-        vocab_instructions = f"You are required to use the following translations for the terms below:\n{vocab_list_str}"
-
-        # Debug message as requested
-        print("\n--- Applying Vocabulary ---")
-        print(f"Target Language: {tgt_lang}")
-        print("Terms applied:")
-        for term in vocabulary:
-            print(f"  - {term['source_text']} -> {term['translated_text']}")
-        print("--------------------------\n")
-
-    # 3. Get translation and detected source language
-    translation_response = translation_chain.invoke({
-        "tgt_lang": tgt_lang,
-        "text": text,
-        "vocabulary_instructions": vocab_instructions
-    })
-
-    translated_text = translation_response['translated_text']
-    from_lang = translation_response['detected_source_language']
-
-    # --- Glossary Application (Post-translation) ---
-    # The glossary logic below is now secondary to the prompt-based vocabulary.
-    # We can keep it as a fallback or for a different purpose if needed.
-    # For now, we will rely on the prompt to have handled the vocabulary.
-    final_text = translated_text
-
-    # 4. Get glossary (for display, not for replacement)
     try:
-        glossary_result = glossary_chain.invoke({
-            "source_text": text,
+        # --- Phase 2: Vocabulary Application ---
+        # 1. Get vocabulary from DB for the target language
+        vocabulary = database.get_vocabulary_for_lang(tgt_lang)
+
+        # 2. Prepare vocabulary instructions for the prompt
+        vocab_instructions = ""
+        if vocabulary:
+            # Sort by length of source_text descending to handle substrings correctly
+            vocabulary.sort(key=lambda x: len(x['source_text']), reverse=True)
+
+            # Format for prompt
+            vocab_list_str = "\n".join([f'- "{term["source_text"]}" must be translated as "{term["translated_text"]}"' for term in vocabulary])
+            vocab_instructions = f"You are required to use the following translations for the terms below:\n{vocab_list_str}"
+
+            # Debug message as requested
+            print("\n--- Applying Vocabulary ---")
+            print(f"Target Language: {tgt_lang}")
+            print("Terms applied:")
+            for term in vocabulary:
+                print(f"  - {term['source_text']} -> {term['translated_text']}")
+            print("--------------------------\n")
+
+        # 3. Get translation and detected source language
+        translation_response = translation_chain.invoke({
+            "tgt_lang": tgt_lang,
+            "text": text,
+            "vocabulary_instructions": vocab_instructions
+        })
+
+        translated_text = translation_response['translated_text']
+        from_lang = translation_response['detected_source_language']
+
+        # --- Glossary Application (Post-translation) ---
+        # The glossary logic below is now secondary to the prompt-based vocabulary.
+        # We can keep it as a fallback or for a different purpose if needed.
+        # For now, we will rely on the prompt to have handled the vocabulary.
+        final_text = translated_text
+
+        # 4. Get glossary (for display, not for replacement)
+        try:
+            glossary_result = glossary_chain.invoke({
+                "source_text": text,
+                "translation": final_text,
+                "tgt_lang": tgt_lang
+            })
+        except Exception as e:
+            # If glossary extraction fails, return an empty list
+            print(f"Glossary extraction failed: {e}")
+            glossary_result = {"glossary": []}
+
+        # --- Phase 3.1: Auto-save glossary to vocabulary ---
+        if glossary_result.get("glossary"):
+            # The `term` from glossary is the translated text, and `source_term` is the original.
+            for term in glossary_result["glossary"]:
+                # We need to map glossary fields to vocabulary fields.
+                # source_term -> source_text
+                # term -> translated_text
+                # We don't have annotation from this process, so we'll pass None.
+                # The language is the target language of the translation.
+                try:
+                    database.add_vocabulary_term(
+                        source_text=term["source_term"],
+                        language=tgt_lang,
+                        translated_text=term["term"],
+                        annotation=term.get("definition")  # Use definition as annotation
+                    )
+                    print(f"Auto-saved to vocabulary: {term['source_term']} -> {term['term']}")
+                except Exception as e:
+                    # This might fail if the term already exists (due to UNIQUE constraint), which is fine.
+                    print(f"Could not auto-save term '{term['source_term']}': {e}")
+
+        # 5. Save to history and get the new item
+        new_history_item = database.add_translation_to_history(
+            source_text=text,
+            from_lang=from_lang,
+            to_lang=tgt_lang,
+            translated_text=final_text,
+        )
+
+        # 6. Return response
+        return JSONResponse(content={
             "translation": final_text,
-            "tgt_lang": tgt_lang
+            "history_item": new_history_item
         })
     except Exception as e:
-        # If glossary extraction fails, return an empty list
-        print(f"Glossary extraction failed: {e}")
-        glossary_result = {"glossary": []}
+        import traceback
+        print("\n--- ERROR DURING TRANSLATION ---")
+        traceback.print_exc()
+        print("--------------------------------\n")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    # --- Phase 3.1: Auto-save glossary to vocabulary ---
-    if glossary_result.get("glossary"):
-        # The `term` from glossary is the translated text, and `source_term` is the original.
-        for term in glossary_result["glossary"]:
-            # We need to map glossary fields to vocabulary fields.
-            # source_term -> source_text
-            # term -> translated_text
-            # We don't have annotation from this process, so we'll pass None.
-            # The language is the target language of the translation.
-            try:
-                database.add_vocabulary_term(
-                    source_text=term["source_term"],
-                    language=tgt_lang,
-                    translated_text=term["term"],
-                    annotation=term.get("definition")  # Use definition as annotation
-                )
-                print(f"Auto-saved to vocabulary: {term['source_term']} -> {term['term']}")
-            except Exception as e:
-                # This might fail if the term already exists (due to UNIQUE constraint), which is fine.
-                print(f"Could not auto-save term '{term['source_term']}': {e}")
-
-    # 5. Save to history and get the new item
-    new_history_item = database.add_translation_to_history(
-        source_text=text,
-        from_lang=from_lang,
-        to_lang=tgt_lang,
-        translated_text=final_text
-    )
-
-    return JSONResponse({
-        "translation": final_text,
-        "glossary": glossary_result.get("glossary", []),
-        "history_item": new_history_item
-    })
 
 # --- History Deletion Endpoint ---
 
